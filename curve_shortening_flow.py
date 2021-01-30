@@ -2,45 +2,25 @@ import pygame
 import math
 import numpy as np
 
+# Curve shortening flow in Pygame. 
+# Run the script and draw a shape of your liking. 
+# Press space and watch the curve evolve!
+
 dims = 1200, 1000
 screen = pygame.display.set_mode(dims, 0, 32)
 pygame.font.init()
 myfont = pygame.font.SysFont('Times New Roman', 40)
 textsurface = myfont.render('Curve shortening flow', False, (190, 200, 190))
-two_pi = 2*math.pi
 
-def epitrochoid(R, r, d, n):
-    points = []
-    for i in range(n):
-        points.append(((R+r)*math.cos(2*math.pi/n*i)-d*math.cos((R+r)/r*2*math.pi/n*i)+300, (R+r)*math.sin(2*math.pi/n*i)-d*math.sin((R+r)/r*2*math.pi/n*i)+300))
-    return points
-def epicycloid(a, b, n):
-    points = []
-    for i in range(n):
-        t = 10*math.pi/n*i
-        points.append((((a + b)*math.cos(t) + b*math.cos((a + b)/b*t))*150+300,
-                     ((a + b)*math.sin(t) + b*math.sin((a + b)/b*t))*150+300))
-    return points
-def lemniscate(n):
-    points = []
-    for i in range(n):
-        t = 2*math.pi/n*i
-        points.append(((400*math.sin(t))/(1+(math.sin(t))**2)+500, ((400*math.sin(t)*math.cos(t))/(1+(math.sin(t))**2)+500)))
-    return points
+points = []
 
-def butterfly_curve(n):
-    p = []
-    for i in range(n):
-        t = 24*math.pi/n*i
-        p.append((math.sin(t)*(math.exp(math.cos(t))-2*math.cos(4*t)+(math.sin(t/12))**5)*100+dims[0]/2,
-            math.cos(t)*(math.exp(math.cos(t))-2*math.cos(4*t)+(math.sin(t/12))**5)*100+dims[1]/2-dims[1]*0.1))
-    return p
-
-points = []#lemniscate(10000)
-
+# Computes the area of the shape (which is a polygon) using
+# the 'shoelace formula'.
 def area(points):
     return np.abs(sum([points[i-1][0]*points[i][1]-points[i][0]*points[i-1][1] for i in range(len(points))])/2)/(dims[0]*dims[1])
 
+# Computes the radius of a sphere with the points p0,.., p2
+# on its perimeter. Used a measure of curvature.
 def radius(p0, p1, p2):
     p0 = np.array(p0)
     p1 = np.array(p1)
@@ -58,6 +38,8 @@ def unit_vector(vector):
         return (0,0)
     return (vector[0]/size, vector[1]/size)
 
+# Curve shortening flow algorithm.
+# Moves points according to curvature.
 def curve_shortening_flow(points, ds, iterations):
     points = np.array(points)
     new_points = []
@@ -102,9 +84,11 @@ def curve_shortening_flow(points, ds, iterations):
         direction_points.append(uv)
     return new_points, curvature_points, direction_points
 
+
 def dist(p0, p1):
     return ((p0[0]-p1[0])**2 + (p0[1]-p1[1])**2)**0.5
 
+# Removes points which are too close to reduce calculations
 def kill_the_points(points, graininess):
     length = len(points)
     i = 0
@@ -116,6 +100,7 @@ def kill_the_points(points, graininess):
             i += 1
     return points
 
+# Adds points when points are too far apart.
 def generate_the_points(points, graininess):
     length = len(points)
     i = 0
@@ -133,8 +118,8 @@ last_mouse_click = False
 finished  = True
 was_begun = False
 b = False
-counter = 0
 graininess = 1
+speed = 1
 grain_bool = False
 while running:
     screen.fill((15,25,35))
@@ -148,10 +133,11 @@ while running:
                 was_begun = True
                 points = generate_the_points(points, graininess)
             if event.key == pygame.K_UP:
-                graininess *= 1.1
+                speed *= 1.1
             if event.key == pygame.K_DOWN:
-                graininess /= 1.1
+                speed /= 1.1
                 grain_bool = True
+
     if pygame.mouse.get_pressed()[0] and not last_mouse_click \
     and 0 < pygame.mouse.get_pos()[0] < 100 \
         and 0 < pygame.mouse.get_pos()[1] < 50:
@@ -164,20 +150,22 @@ while running:
             was_begun = False
         elif clicked_last:
             clicked_last = False
-    if len(points) > 2:
+    if len(points) > 5:
         if b:
-
             if grain_bool:
-                points = generate_the_points(points, graininess/10)
+                points = generate_the_points(points, speed*graininess/10)
             else:
-                points = kill_the_points(points, graininess/10)
+                points = kill_the_points(points, speed*graininess/10)
             if len(points) > 2:
-                points, curvature_points, direction_points = curve_shortening_flow(points, graininess/10, 5)
-                max = 255/np.max(curvature_points)
+                points, curvature_points, direction_points = curve_shortening_flow(points, speed*graininess/10, 5)
+                max_curvature = 255/np.max(curvature_points)
+                c_area = 10*area(points)
+                graininess = c_area if c_area > 1 else 1;
+
+                screen.blit(myfont.render(f'Area: {c_area:0.3f}', False, (190, 200, 190)), (dims[0]-210, 0))
                 for i in range(len(points)):
-                    screen.blit(myfont.render(f'Area: {area(points):0.3f}', False, (190, 200, 190)), (dims[0]-210, 0))
-                    pygame.draw.line(screen, (curvature_points[i]*max,
-                    150-120/255*curvature_points[i]*max, 255-curvature_points[i]*max),
+                    pygame.draw.line(screen, (curvature_points[i]*max_curvature,
+                    150-120/255*curvature_points[i]*max_curvature, 255-curvature_points[i]*max_curvature),
                     points[i-1], points[i], 1)
             else:
                 points = list()
@@ -188,12 +176,17 @@ while running:
             if not was_begun:
                 pygame.draw.lines(screen, (212, 212, 212), False, points)
             else:
-                points = generate_the_points(points, graininess)
-                screen.blit(myfont.render(f'Area: {area(points):0.3f}', False, (190, 200, 190)), (dims[0]-210, 0))
+                points = generate_the_points(points, graininess*speed)
+                c_area = 10*area(points)
+                graininess = c_area if c_area > 1 else 1;
+                screen.blit(myfont.render(f'Area: {c_area:0.3f}', False, (190, 200, 190)), (dims[0]-210, 0))
                 for i in range(len(points)):
                     pygame.draw.line(screen, (212, 212, 212), points[i-1], points[i])
-    screen.blit(myfont.render(f'Speed: {graininess:.2f}', False, (190, 200, 190)), (0,dims[1]-50))
+    elif was_begun:
+        points = []
+        was_begun = False
+        b = False;
+    screen.blit(myfont.render(f'Speed: {speed:.2f}', False, (190, 200, 190)), (0,dims[1]-50))
     screen.blit(textsurface,(0,0))
     pygame.display.update()
     last_mouse_click = pygame.mouse.get_pressed()[0]
-    counter += 1
